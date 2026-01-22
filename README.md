@@ -69,7 +69,7 @@ The time series data in this package was imported from the following R packages:
 
 ## References
 
-The datasets correspond to the following forecasting competitions:
+The datasets were used in the following forecasting competitions:
 
 **M1 Competition:**
 > Makridakis, S., Andersen, A., Carbone, R., Fildes, R., Hibon, M., Lewandowski, R., Newton, J., Parzen, E., & Winkler, R. (1982). The accuracy of extrapolation (time series) methods: Results of a forecasting competition. *Journal of Forecasting*, 1(2), 111–153. [doi:10.1002/for.3980010202](https://doi.org/10.1002/for.3980010202)
