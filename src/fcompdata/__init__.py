@@ -1,12 +1,12 @@
 """
-M-Competition time series datasets.
+Forecasting Competitions Datasets.
 
 This package provides access to historical time series forecasting competition
 datasets (M1, M3, Tourism) with an interface similar to R's Mcomp package.
 
 Usage
 -----
->>> from mcomp import M1, M3, Tourism
+>>> from fcompdata import M1, M3, Tourism
 >>>
 >>> # Access series by 1-based index (R-style)
 >>> series = M3[1]
@@ -28,7 +28,7 @@ Tourism : MCompDataset
     Tourism competition (1311 series)
 """
 
-from mcomp.mcomp import (
+from fcompdata.fcompdata import (
     M1,
     M3,
     MCompDataset,

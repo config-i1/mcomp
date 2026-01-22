@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Python library for loading M-Competition time series datasets (M1, M3, Tourism) with an interface similar to R's Mcomp package.
+Forecasting Competitions Datasets (fcompdata) - a Python library for loading M-Competition time series datasets (M1, M3, Tourism) with an interface similar to R's Mcomp package.
 
 ## Commands
 
@@ -28,21 +28,21 @@ mypy src/
 ## Architecture
 
 ```
-src/mcomp/
+src/fcompdata/
 ├── __init__.py      # Public API exports
-├── mcomp.py         # Core module (~290 lines)
+├── fcompdata.py     # Core module (~290 lines)
 └── data/            # JSON data files
     ├── m1_data.json
     ├── m3_data.json
     └── tcomp_data.json
 ```
 
-**Core classes** (`src/mcomp/mcomp.py`):
+**Core classes** (`src/fcompdata/fcompdata.py`):
 - `MCompSeries`: Single time series with `x` (train), `xx` (test), `h` (horizon), `period`, `type`, `description`
 - `MCompDataset`: Container with dict-like access, supports `subset(series_type)` filtering
 - `_LazyDataset`: Lazy-loading wrapper for module-level datasets
 
-**Public API** (`from mcomp import ...`):
+**Public API** (`from fcompdata import ...`):
 - `M1`, `M3`, `Tourism`: Lazy-loaded dataset instances
 - `load_m1()`, `load_m3()`, `load_tourism()`: Explicit loader functions
 - `MCompSeries`, `MCompDataset`: Classes for type hints
