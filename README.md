@@ -1,6 +1,6 @@
 # fcompdata
 
-Forecasting Competitions Datasets - a Python library for loading M-Competition time series datasets (M1, M3, Tourism) with an interface similar to R's `Mcomp` package.
+Forecasting Competitions Datasets - a Python library for loading M and tourism competitions time series datasets (M1, M3, Tourism) with an interface similar to R's `Mcomp` and `Tcomp` packages.
 
 ## Installation
 
