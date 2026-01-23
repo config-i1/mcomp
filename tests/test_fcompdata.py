@@ -195,3 +195,72 @@ class TestMCompDataset:
         for series in monthly:
             assert series.type == "monthly"
             break  # Only check first one
+
+
+class TestM4Imports:
+    """Test M4 imports and error handling."""
+
+    def test_import_m4(self):
+        from fcompdata import M4
+        assert M4 is not None
+
+    def test_import_load_m4(self):
+        from fcompdata import load_m4
+        assert callable(load_m4)
+
+    def test_load_m4_without_download_raises_error(self):
+        from fcompdata import load_m4
+        from fcompdata.download import get_m4_path
+        # Skip if data already exists (e.g., from previous test runs)
+        if get_m4_path("hourly") is not None:
+            pytest.skip("M4 hourly data already downloaded")
+        # M4 requires downloading first, so this should raise FileNotFoundError
+        with pytest.raises(FileNotFoundError):
+            load_m4("hourly")
+
+    def test_load_m4_invalid_frequency(self):
+        from fcompdata import load_m4
+        with pytest.raises(ValueError, match="Unknown frequency"):
+            load_m4("invalid")
+
+
+class TestDownloadModule:
+    """Test download module functions."""
+
+    def test_import_download_module(self):
+        from fcompdata.download import download_m4, get_data_home, get_m4_path, clear_cache
+        assert callable(download_m4)
+        assert callable(get_data_home)
+        assert callable(get_m4_path)
+        assert callable(clear_cache)
+
+    def test_get_data_home_returns_path(self):
+        from pathlib import Path
+        from fcompdata.download import get_data_home
+        data_home = get_data_home()
+        assert isinstance(data_home, Path)
+        assert data_home.name == ".fcompdata"
+
+    def test_get_m4_path_returns_none_when_not_downloaded(self):
+        from fcompdata.download import get_m4_path
+        # Should return None if not downloaded
+        path = get_m4_path("yearly")
+        # Path is None or exists (if previously downloaded)
+        assert path is None or path.exists()
+
+    def test_get_m4_path_invalid_frequency(self):
+        from fcompdata.download import get_m4_path
+        with pytest.raises(ValueError, match="Unknown frequency"):
+            get_m4_path("invalid")
+
+    def test_m4_urls_defined(self):
+        from fcompdata.download import M4_URLS, M4_FILENAMES
+        expected_frequencies = ["yearly", "quarterly", "monthly", "weekly", "daily", "hourly"]
+        for freq in expected_frequencies:
+            assert freq in M4_URLS
+            assert freq in M4_FILENAMES
+
+    def test_download_m4_invalid_frequency(self):
+        from fcompdata.download import download_m4
+        with pytest.raises(ValueError, match="Unknown frequency"):
+            download_m4("invalid")

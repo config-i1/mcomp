@@ -1,11 +1,11 @@
 """
 Forecasting Competitions Datasets loader.
 
-Loads M1, M3, and Tourism competition datasets from local JSON files,
+Loads M1, M3, M4, and Tourism competition datasets,
 providing an interface similar to R's Mcomp package.
 
 Usage:
-    from fcompdata import M1, M3, Tourism
+    from fcompdata import M1, M3, M4, Tourism
 
     # Access series by index (1-based, like R)
     series = M3[2568]
@@ -15,12 +15,19 @@ Usage:
 
     # Filter by type
     yearly = M3.subset('yearly')
+
+    # M4 requires downloading first (100k series)
+    from fcompdata.download import download_m4
+    download_m4()  # Downloads to ~/.fcompdata/
+    from fcompdata import M4
+    series = M4[1]
 """
 from __future__ import annotations
 
 import json
 from collections.abc import Iterator
 from importlib import resources
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -164,6 +171,9 @@ def _parse_period(period_str: str) -> int:
         "YEARLY": 1,
         "QUARTERLY": 4,
         "MONTHLY": 12,
+        "WEEKLY": 1,
+        "DAILY": 1,
+        "HOURLY": 1,
         "OTHER": 1,
     }
     return period_map.get(period_str.upper(), 1)
@@ -281,6 +291,222 @@ def load_tourism() -> MCompDataset:
     return _load_json_dataset("tcomp_data.json", "Tourism")
 
 
+def _parse_tsf_file(filepath: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """
+    Parse a .tsf format file from Monash Time Series Forecasting Repository.
+
+    Parameters
+    ----------
+    filepath : Path
+        Path to .tsf file
+
+    Returns
+    -------
+    tuple
+        (metadata dict, list of series dicts)
+    """
+    metadata: dict[str, Any] = {}
+    series_list: list[dict[str, Any]] = []
+    col_names: list[str] = []
+    col_types: list[str] = []
+
+    in_data_section = False
+
+    with open(filepath, encoding="latin-1") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            if line.startswith("@"):
+                if line.lower().startswith("@data"):
+                    in_data_section = True
+                    continue
+
+                # Parse metadata
+                parts = line.split(maxsplit=2)
+                tag = parts[0].lower()
+
+                if tag == "@attribute":
+                    # @attribute name type
+                    col_names.append(parts[1])
+                    col_types.append(parts[2] if len(parts) > 2 else "string")
+                elif tag == "@frequency":
+                    metadata["frequency"] = parts[1] if len(parts) > 1 else None
+                elif tag == "@horizon":
+                    metadata["horizon"] = int(parts[1]) if len(parts) > 1 else None
+                elif tag == "@missing":
+                    metadata["missing"] = parts[1].lower() == "true" if len(parts) > 1 else False
+                elif tag == "@equallength":
+                    metadata["equallength"] = (
+                        parts[1].lower() == "true" if len(parts) > 1 else False
+                    )
+
+            elif in_data_section and line:
+                # Parse data line: attr1:attr2:...:values
+                # Values are comma-separated after the last colon
+                # Use maxsplit to handle timestamps that might have special chars
+                num_attrs = len(col_names)  # Number of @attribute entries
+                parts = line.split(":", maxsplit=num_attrs)
+
+                if len(parts) > num_attrs:
+                    series_data = {}
+                    for i, name in enumerate(col_names):
+                        series_data[name] = parts[i]
+
+                    # Last part contains the comma-separated values
+                    values_str = parts[-1]
+                    values = []
+                    for v in values_str.split(","):
+                        v = v.strip()
+                        if v and v != "?":
+                            values.append(float(v))
+                        elif v == "?":
+                            values.append(np.nan)
+                    series_data["values"] = np.array(values)
+                    series_list.append(series_data)
+
+    metadata["col_names"] = col_names
+    return metadata, series_list
+
+
+def _load_tsf_dataset(filepath: Path, name: str, horizon: int, freq_type: str) -> MCompDataset:
+    """
+    Load competition dataset from .tsf file.
+
+    Parameters
+    ----------
+    filepath : Path
+        Path to .tsf file
+    name : str
+        Dataset name
+    horizon : int
+        Forecast horizon (used to split train/test)
+    freq_type : str
+        Frequency type (yearly, quarterly, etc.)
+
+    Returns
+    -------
+    MCompDataset
+        Loaded dataset
+    """
+    metadata, series_list = _parse_tsf_file(filepath)
+
+    # Use horizon from metadata if available
+    h = metadata.get("horizon", horizon)
+
+    series_dict = {}
+    for idx, item in enumerate(series_list, start=1):
+        values = item["values"]
+        sn = item.get("series_name", f"{name}_{idx}")
+
+        # Split into train (x) and test (xx) based on horizon
+        if len(values) > h:
+            x = values[:-h]
+            xx = values[-h:]
+        else:
+            # If series is too short, use all for training
+            x = values
+            xx = np.array([])
+
+        series_dict[idx] = MCompSeries(
+            sn=sn,
+            x=x,
+            xx=xx,
+            h=h,
+            period=_parse_period(freq_type),
+            series_type=freq_type.lower(),
+            description="",
+        )
+
+    return MCompDataset(series_dict, name)
+
+
+# M4 horizon values by frequency
+M4_HORIZONS = {
+    "yearly": 6,
+    "quarterly": 8,
+    "monthly": 18,
+    "weekly": 13,
+    "daily": 14,
+    "hourly": 48,
+}
+
+
+def load_m4(frequency: str | None = None) -> MCompDataset:
+    """
+    Load M4 competition dataset.
+
+    The M4 dataset must first be downloaded using `download_m4()`.
+    Data is cached in ~/.fcompdata/m4/.
+
+    Parameters
+    ----------
+    frequency : str, optional
+        Specific frequency to load: 'yearly', 'quarterly', 'monthly',
+        'weekly', 'daily', or 'hourly'. If None, loads all frequencies
+        combined into a single dataset.
+
+    Returns
+    -------
+    MCompDataset
+        M4 dataset. Full dataset has 100,000 series:
+        - 23,000 yearly (h=6)
+        - 24,000 quarterly (h=8)
+        - 48,000 monthly (h=18)
+        - 359 weekly (h=13)
+        - 4,227 daily (h=14)
+        - 414 hourly (h=48)
+
+    Raises
+    ------
+    FileNotFoundError
+        If data hasn't been downloaded yet.
+
+    Examples
+    --------
+    >>> from fcompdata.download import download_m4
+    >>> download_m4()  # Download first (one time)
+    >>> from fcompdata import load_m4
+    >>> M4 = load_m4()  # Load all frequencies
+    >>> yearly = load_m4('yearly')  # Load only yearly
+    """
+    from fcompdata.download import get_data_home
+
+    m4_dir = get_data_home() / "m4"
+
+    if frequency is not None:
+        if frequency not in M4_HORIZONS:
+            raise ValueError(
+                f"Unknown frequency '{frequency}'. "
+                f"Must be one of: {list(M4_HORIZONS.keys())}"
+            )
+        frequencies = [frequency]
+    else:
+        frequencies = list(M4_HORIZONS.keys())
+
+    all_series: dict[int, MCompSeries] = {}
+    current_idx = 1
+
+    for freq in frequencies:
+        filepath = m4_dir / f"m4_{freq}_dataset.tsf"
+        if not filepath.exists():
+            raise FileNotFoundError(
+                f"M4 {freq} data not found at {filepath}. "
+                f"Please run: from fcompdata.download import download_m4; download_m4('{freq}')"
+            )
+
+        dataset = _load_tsf_dataset(filepath, f"M4_{freq}", M4_HORIZONS[freq], freq)
+
+        # Re-index to maintain continuous 1-based indexing across frequencies
+        for series in dataset:
+            all_series[current_idx] = series
+            current_idx += 1
+
+    name = f"M4_{frequency}" if frequency else "M4"
+    return MCompDataset(all_series, name)
+
+
 class _LazyDataset:
     """Lazy-loading wrapper for M-competition datasets."""
 
@@ -326,4 +552,5 @@ class _LazyDataset:
 # Module-level lazy datasets for convenient access
 M1 = _LazyDataset(load_m1, "M1")
 M3 = _LazyDataset(load_m3, "M3")
+M4 = _LazyDataset(load_m4, "M4")
 Tourism = _LazyDataset(load_tourism, "Tourism")
