@@ -1,5 +1,7 @@
 # fcompdata
 
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/fcompdata.svg)](https://pypi.org/project/fcompdata/)
+
 Forecasting Competitions Datasets - a Python library for loading M and tourism competitions time series datasets (M1, M3, M4, Tourism) with an interface similar to R's `Mcomp` and `Tcomp` packages.
 
 ## Installation
